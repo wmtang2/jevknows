@@ -1,10 +1,10 @@
-"""Smoke test: call the jev-guard MCP server like VS Code would.
+"""Smoke test: call the jev-guard MCP server with any MCP client.
 
-Runs three sessions against vscode/scripts/mcp_server.py -- mock-malicious,
+Runs three sessions against mcp/scripts/mcp_server.py -- mock-malicious,
 mock-clean, and live (needs TYPESAFE_API_KEY) -- and prints each verdict.
 
 Run from the repo root:
-    <venv python> vscode/tests/mcp_smoke.py
+    <venv python> mcp/tests/mcp_smoke.py
 """
 
 import asyncio
@@ -15,7 +15,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SERVER = os.path.join(REPO, "vscode", "scripts", "mcp_server.py")
+SERVER = os.path.join(REPO, "mcp", "scripts", "mcp_server.py")
 
 
 async def run_case(name, mock, calls):
@@ -36,8 +36,8 @@ async def run_case(name, mock, calls):
 
 
 async def main():
-    inj = os.path.join(REPO, "vscode", "tests", "injected.md")
-    ben = os.path.join(REPO, "vscode", "tests", "benign.md")
+    inj = os.path.join(REPO, "mcp", "tests", "injected.md")
+    ben = os.path.join(REPO, "mcp", "tests", "benign.md")
     await run_case("mock-malicious", "malicious", [
         ("check_file", {"path": inj}),
     ])

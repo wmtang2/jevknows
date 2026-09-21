@@ -1,8 +1,8 @@
-"""MCP server exposing the Jev injection guard as chat tools for VS Code.
+"""MCP server exposing the Jev injection guard to any MCP-capable coding agent.
 
-VS Code (Copilot agent mode) has no pre-tool-use hook for its built-in
-tools, so the guard ships as an MCP server instead. It exposes three tools
-to the agent:
+The universal port for agents whose platform has no pre-tool-use hook
+(VS Code, Cursor, and other MCP-capable clients): the guard ships as an
+MCP server instead, exposing three tools to the agent:
 
   check_url(url)     fetch and judge a web page BEFORE the agent uses it
   check_file(path)   judge a file BEFORE the agent reads it
@@ -13,10 +13,11 @@ signals and a directive not to use the content. The point of the tool
 shape: when the verdict is BLOCKED, the tool result replaces the content
 itself, so malicious instructions never reach the model. Enforcement is
 advisory (the agent must call the tool and respect the verdict) -- pair it
-with the .github/copilot-instructions.md policy in vscode/README.md.
+with the AGENTS.md policy in ../README.md (or your client's equivalent
+instructions file, e.g. .github/copilot-instructions.md).
 
-Run (stdio transport):  <venv python> vscode/scripts/mcp_server.py
-Configure in .vscode/mcp.json -- see vscode/README.md.
+Run (stdio transport):  <venv python> mcp/scripts/mcp_server.py
+Register with any MCP client (command + args) -- see ../README.md.
 Env: TYPESAFE_API_KEY required for live judging; same JEV_GUARD_* knobs as
 guard.py (THRESHOLD, MAX_CHARS, FAIL_MODE, MOCK).
 """

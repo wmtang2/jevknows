@@ -1,8 +1,8 @@
-"""Jev injection guard engine for the VS Code port.
+"""Jev injection guard engine for the MCP port.
 
-VS Code (Copilot agent mode) has no pre-tool-use hook for its built-in
-tools, so this port drives the engine through an MCP server
-(mcp_server.py, same folder) plus an instructions-file policy. This file
+Any MCP-capable agent without a pre-tool-use hook drives this engine
+through an MCP server (mcp_server.py, same folder) plus an
+instructions-file policy. This file
 keeps the manual CLI (--file/--url/--text) for direct checks and stays
 logic-identical to the other ports' guard.py; the --hook mode is unused
 here but kept for parity.
