@@ -19,13 +19,17 @@ Ports:
 | --- | --- | --- |
 | [ZCode](zcode/README.md) | Deterministic: every `WebFetch` and `Read` is intercepted before it runs | [zcode/README.md](zcode/README.md) |
 | [OpenAI Codex CLI](codex/README.md) | Deterministic for shell commands (URL targets pre-judged before curl/wget runs) and MCP tools; advisory for hosted tools via AGENTS.md | [codex/README.md](codex/README.md) |
+| [VS Code (Copilot agent mode)](vscode/README.md) | Advisory: guard exposed as MCP tools (`check_url`/`check_file`/`check_text`) plus an instructions policy; built-in tools are not interceptable | [vscode/README.md](vscode/README.md) |
 
 The engine is one Python script; any agent with a pre-tool-use hook can run
 it as-is.
 
 ## How it works
 
-The agent's `PreToolUse` hook runs the guard **before** a load happens:
+Where the agent has a pre-tool-use hook (ZCode, Codex), the hook runs the
+guard **before** a load happens and denies the call on detection. On VS Code
+the same checks run as MCP tools the agent is instructed to call first — a
+BLOCKED verdict replaces the content. The judgment flow is identical:
 
 ```
 load requested (WebFetch / Read / shell fetch / MCP read)
@@ -71,18 +75,29 @@ jevknows/
 │       ├── SKILL.md                 agent-facing operational docs
 │       ├── scripts/guard.py
 │       └── tests/
-└── codex/                           OpenAI Codex CLI port
-    ├── README.md                    setup: config.toml hook + AGENTS.md advisory
-    ├── scripts/guard.py
+├── codex/                           OpenAI Codex CLI port
+│   ├── README.md                    setup: config.toml hook + AGENTS.md advisory
+│   ├── scripts/guard.py
+│   └── tests/
+└── vscode/                          VS Code (Copilot agent mode) port
+    ├── README.md                    setup: .vscode/mcp.json + copilot-instructions.md
+    ├── scripts/
+    │   ├── guard.py                 engine + manual CLI (same logic as other ports)
+    │   └── mcp_server.py            MCP server: check_url / check_file / check_text
     └── tests/
+        ├── mcp_smoke.py             end-to-end MCP client test
+        ├── benign.md
+        └── injected.md
 ```
 
 ## Requirements
 
-- A supported coding agent (ZCode, or OpenAI Codex CLI with hooks)
+- A supported coding agent (ZCode, OpenAI Codex CLI, or VS Code with Copilot
+  agent mode)
 - Python 3.10+ (tested on 3.13)
 - A TypeSafe API key (create one in the TypeSafe console)
-- `typesafe-sdk` (installed into a local venv; see the port READMEs)
+- `typesafe-sdk` (plus `mcp` for the VS Code port; installed into a local
+  venv — see the port READMEs)
 
 ## Manual judging
 
@@ -185,7 +200,9 @@ All via environment variables:
   `JEV_GUARD_FAIL_MODE=block` only once the key and network are dependable.
 - **Port-specific gaps** — ZCode covers `WebFetch`/`Read` fully but not
   `Bash`/`Grep` output; Codex cannot intercept hosted tools or plain file
-  reads at all (advisory AGENTS.md instead). Details in each port's README.
+  reads (advisory AGENTS.md instead); VS Code has no interception at all and
+  is advisory by construction (MCP tools + instructions policy). Details in
+  each port's README.
 
 ## License
 
