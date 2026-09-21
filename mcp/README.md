@@ -156,8 +156,10 @@ Manual CLI (same engine):
 ## Configuration
 
 Same environment variables as the other ports: `TYPESAFE_API_KEY`,
-`JEV_GUARD_THRESHOLD` (0.80), `JEV_GUARD_MAX_CHARS` (60000),
-`JEV_GUARD_FAIL_MODE` (`open`; `block` turns guard errors into BLOCKED
+`JEV_GUARD_THRESHOLD` (0.80), `JEV_GUARD_MAX_CHARS` (60000 chunk size),
+`JEV_GUARD_MAX_CHUNKS` (10 — large content is screened in full via
+overlapping chunks up to this cap), `JEV_GUARD_MAX_BYTES` (10 MB raw read
+cap), `JEV_GUARD_FAIL_MODE` (`open`; `block` turns guard errors into BLOCKED
 verdicts), `JEV_GUARD_MOCK`. See the [root README](../README.md).
 
 ## Limitations

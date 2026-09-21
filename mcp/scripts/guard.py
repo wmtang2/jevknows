@@ -19,7 +19,8 @@ Usage:
   guard.py --text                    # judge stdin text, print report
 
 Env: TYPESAFE_API_KEY (required), JEV_GUARD_THRESHOLD (0.80),
-JEV_GUARD_MAX_CHARS (60000), JEV_GUARD_FAIL_MODE (open|block),
+JEV_GUARD_MAX_CHARS (60000 chunk size), JEV_GUARD_MAX_CHUNKS (10),
+JEV_GUARD_MAX_BYTES (10MB), JEV_GUARD_FAIL_MODE (open|block),
 JEV_GUARD_SKIP (globs, files only), JEV_GUARD_MOCK (clean|malicious, tests).
 """
 
@@ -38,7 +39,10 @@ EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
 THRESHOLD = float(os.environ.get("JEV_GUARD_THRESHOLD", "0.80"))
-MAX_CHARS = int(os.environ.get("JEV_GUARD_MAX_CHARS", "60000"))
+MAX_CHARS = int(os.environ.get("JEV_GUARD_MAX_CHARS", "60000"))  # chunk size
+CHUNK_OVERLAP = min(2000, MAX_CHARS // 10)  # keeps boundary-straddling text whole
+MAX_CHUNKS = int(os.environ.get("JEV_GUARD_MAX_CHUNKS", "10"))
+MAX_BYTES = int(os.environ.get("JEV_GUARD_MAX_BYTES", str(10 * 1024 * 1024)))
 FAIL_MODE = os.environ.get("JEV_GUARD_FAIL_MODE", "open").strip().lower()
 MOCK = os.environ.get("JEV_GUARD_MOCK", "").strip().lower() or None
 SKIP_GLOBS = [g.strip() for g in os.environ.get("JEV_GUARD_SKIP", "").split(",") if g.strip()]
@@ -115,6 +119,65 @@ def decide(probs: dict[str, float]) -> tuple[bool, str]:
     return True, "malicious instruction detected: " + ", ".join(fired)
 
 
+def total_chunks(content: str) -> int:
+    """Uncapped chunk count -- the honest denominator for coverage."""
+    if len(content) <= MAX_CHARS:
+        return 1
+    stride = MAX_CHARS - CHUNK_OVERLAP
+    return -(-(len(content) - MAX_CHARS) // stride) + 1
+
+
+def expected_chunks(content: str) -> int:
+    return min(total_chunks(content), MAX_CHUNKS)
+
+
+def split_chunks(content: str) -> list[str]:
+    stride = MAX_CHARS - CHUNK_OVERLAP
+    return [content[i * stride: i * stride + MAX_CHARS]
+            for i in range(expected_chunks(content))]
+
+
+def judge_content(source: dict, content: str) -> dict:
+    """Screen content in overlapping chunks: every chunk is judged, and any
+    chunk over the threshold blocks the whole load. The overlap keeps a
+    directive straddling a chunk boundary whole inside the next chunk."""
+    chunks = split_chunks(content)
+    worst = {name: 0.0 for name in QUESTIONS}
+    fired: list[str] = []
+    request_ids: list[str] = []
+    for idx, text in enumerate(chunks):
+        probs, request_id = judge(source, text)
+        request_ids.append(request_id)
+        blocked, reason = decide(probs)
+        for name in QUESTIONS:
+            worst[name] = max(worst[name], probs[name])
+        if blocked:
+            fired.append(f"chunk {idx + 1}/{len(chunks)}: {reason}")
+    scanned, total = len(chunks), total_chunks(content)
+    return {
+        "blocked": bool(fired),
+        "reason": "; ".join(fired) or "no chunk reached the threshold",
+        "signals": worst,
+        "coverage": {"chunks_scanned": scanned, "chunks_total": total,
+                     "complete": scanned >= total},
+        "request_ids": request_ids,
+    }
+
+
+def format_result(result: dict) -> tuple[bool, str, str]:
+    """(blocked, deny_reason, one-line summary) for hook/manual logging."""
+    summary = " ".join(f"{n}={result['signals'][n]:.2f}" for n in QUESTIONS)
+    cov = result["coverage"]
+    cov_txt = (f"{cov['chunks_scanned']}/{cov['chunks_total']} chunks"
+               + ("" if cov["complete"] else " [PARTIAL coverage]"))
+    ids = result["request_ids"]
+    id_txt = ",".join(ids[:3]) + (f",+{len(ids) - 3} more" if len(ids) > 3 else "")
+    if result["blocked"]:
+        return True, (f"{result['reason']} (worst signals: {summary}; "
+                      f"{cov_txt}; request_ids={id_txt})"), summary
+    return False, "", f"{summary}; {cov_txt}; request_ids={id_txt}"
+
+
 def allow(why: str) -> int:
     log(f"ALLOW: {why}")
     return EXIT_ALLOW
@@ -163,24 +226,26 @@ def looks_binary(raw: bytes) -> bool:
 def load_file(path: str, cwd: str | None) -> tuple[str, str | None]:
     p = resolve_path(path, cwd)
     with open(p, "rb") as f:
-        raw = f.read(MAX_CHARS * 4 + 64)
+        raw = f.read(MAX_BYTES + 1)
     if looks_binary(raw):
         return "", "binary file skipped"
-    text = raw.decode("utf-8", errors="replace")[:MAX_CHARS]
-    if len(raw.decode("utf-8", errors="ignore")) > MAX_CHARS:
-        text += "\n[jev-guard: truncated]"
+    capped = len(raw) > MAX_BYTES
+    text = raw[:MAX_BYTES].decode("utf-8", errors="replace")
+    if capped:
+        text += "\n[jev-guard: read capped at JEV_GUARD_MAX_BYTES]"
     return text, None
 
 
 def load_url(url: str) -> tuple[str, str | None]:
     req = urllib.request.Request(url, headers={"User-Agent": "jev-injection-guard/1.0"})
     with urllib.request.urlopen(req, timeout=20) as resp:
-        raw = resp.read(2_000_000)
+        raw = resp.read(MAX_BYTES + 1)
     if looks_binary(raw):
         return "", "binary/undecodable response skipped"
-    text = raw.decode("utf-8", errors="replace")[:MAX_CHARS]
-    if len(raw) > MAX_CHARS:
-        text += "\n[jev-guard: truncated]"
+    capped = len(raw) > MAX_BYTES
+    text = raw[:MAX_BYTES].decode("utf-8", errors="replace")
+    if capped:
+        text += "\n[jev-guard: read capped at JEV_GUARD_MAX_BYTES]"
     return text, None
 
 
@@ -228,15 +293,14 @@ def judge_target(source: dict, acquire) -> tuple[str, str]:
     if not os.environ.get("TYPESAFE_API_KEY") and not MOCK:
         return "failopen", "TYPESAFE_API_KEY is not set"
     try:
-        probs, request_id = judge(source, content)
+        result = judge_content(source, content)
     except Exception as exc:
         return "failopen", f"judge failed: {type(exc).__name__}: {exc}"
 
-    blocked, reason = decide(probs)
-    summary = " ".join(f"{n}={probs[n]:.2f}" for n in QUESTIONS)
+    blocked, reason, summary = format_result(result)
     if blocked:
-        return "block", f"{source} -> {reason} (all signals: {summary}; request_id={request_id})"
-    return "clean", f"{source} clean ({summary}; request_id={request_id})"
+        return "block", f"{source} -> {reason}"
+    return "clean", f"{source} clean ({summary})"
 
 
 def run_hook() -> int:
@@ -304,19 +368,20 @@ def run_manual(source: dict, content: str, note: str | None) -> int:
         log("TYPESAFE_API_KEY is not set -- cannot run live judgment.")
         return EXIT_ERROR
     try:
-        probs, request_id = judge(source, content)
+        result = judge_content(source, content)
     except Exception as exc:
         log(f"{type(exc).__name__}: {exc}")
         return EXIT_ERROR
 
-    blocked, reason = decide(probs)
+    blocked, reason, summary = format_result(result)
     print(json.dumps({
         "source": source,
-        "signals": probs,
+        "signals": result["signals"],
         "threshold": THRESHOLD,
+        "coverage": result["coverage"],
         "decision": "block" if blocked else "allow",
-        "reason": reason or "no signal reached the threshold",
-        "request_id": request_id,
+        "reason": reason or summary,
+        "request_ids": result["request_ids"],
         **({"mock": MOCK} if MOCK else {}),
     }, indent=2))
     return EXIT_BLOCK if blocked else EXIT_ALLOW

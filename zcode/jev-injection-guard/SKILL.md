@@ -36,6 +36,11 @@ content), in a single request:
 Thresholds and instructions deliberately distinguish *instructing* the agent
 from *discussing* injection (security articles, test fixtures score low).
 
+Content larger than one chunk (60k chars) is screened in full: it is split
+into overlapping chunks, every chunk is judged, and any chunk over the
+threshold blocks. Reports include coverage (`10/14 chunks [PARTIAL
+coverage]` when the chunk cap is hit).
+
 Failure behavior: guard errors **fail open** (allow + note on stderr) so a
 missing key or outage never bricks the session. Set `JEV_GUARD_FAIL_MODE=block`
 for fail-closed — only do this once `TYPESAFE_API_KEY` is reliably present,
@@ -75,8 +80,10 @@ output from `Bash`/`Grep` is **not** guarded; judge that content with
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | — (required) | Jev access; without it the guard fails open |
-| `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal >= this |
-| `JEV_GUARD_MAX_CHARS` | `60000` | Content sent to Jev is truncated here |
+| `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal >= this, in any chunk |
+| `JEV_GUARD_MAX_CHARS` | `60000` | Chunk size screened per Jev call |
+| `JEV_GUARD_MAX_CHUNKS` | `10` | Max chunks screened per load (600 KB at defaults) |
+| `JEV_GUARD_MAX_BYTES` | `10485760` | Raw read cap per load (10 MB) |
 | `JEV_GUARD_FAIL_MODE` | `open` | `block` = deny loads when the guard errors |
 | `JEV_GUARD_SKIP` | — | Comma-separated globs never judged (e.g. `**/tests/*,**/*.min.js`) |
 | `JEV_GUARD_MOCK` | — | `clean`/`malicious` skips the API (wiring tests only) |

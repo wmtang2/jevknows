@@ -60,6 +60,13 @@ The question wording distinguishes content that *instructs* the agent from
 content that merely *discusses* injection (security articles, research, test
 fixtures), which is the usual source of false positives.
 
+Content larger than one chunk is screened in full: it is split into
+**overlapping chunks** of `JEV_GUARD_MAX_CHARS` (2k overlap, so a payload
+straddling a chunk boundary stays whole in the next chunk), every chunk is
+judged, and any chunk over the threshold blocks the load. Reports include
+chunk coverage — `10/14 chunks [PARTIAL coverage]` when the
+`JEV_GUARD_MAX_CHUNKS` cap is hit.
+
 Binary files are skipped without a judgment. Guard errors (missing API key,
 network outage, timeout) **fail open** by default so a broken guard can never
 brick your session — see [Configuration](#configuration) for fail-closed mode.
@@ -167,8 +174,10 @@ All via environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | — (required) | Jev access; without it the guard fails open |
-| `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal ≥ this |
-| `JEV_GUARD_MAX_CHARS` | `60000` | Content sent to Jev is truncated here |
+| `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal ≥ this, in any chunk |
+| `JEV_GUARD_MAX_CHARS` | `60000` | Chunk size screened per Jev call |
+| `JEV_GUARD_MAX_CHUNKS` | `10` | Max chunks screened per load (600 KB at defaults); beyond it coverage is partial |
+| `JEV_GUARD_MAX_BYTES` | `10485760` | Raw read cap per load (10 MB) |
 | `JEV_GUARD_FAIL_MODE` | `open` | `block` = deny loads when the guard errors |
 | `JEV_GUARD_SKIP` | — | Comma-separated globs never judged (e.g. `**/tests/*,**/*.min.js`) |
 | `JEV_GUARD_MOCK` | — | `clean`/`malicious` skips the API (wiring tests only) |
@@ -195,8 +204,13 @@ All via environment variables:
 - **A judgment is not a sandbox.** Signals are calibrated probabilities, not
   proof. Validate the guard on your own traffic, tune the threshold to your
   consequences, and treat the `request_id` as your audit handle.
-- **Truncation.** Only the first `JEV_GUARD_MAX_CHARS` characters are judged;
-  payloads past that point are not screened.
+- **Coverage is capped, not unbounded.** Large content is screened in
+  overlapping chunks — every chunk must pass, so payloads cannot hide at
+  chunk boundaries — up to `JEV_GUARD_MAX_CHUNKS` chunks (600 KB at
+  defaults) and `JEV_GUARD_MAX_BYTES` raw (10 MB). Past those caps the
+  remainder is unscreened and the guard says so (`PARTIAL coverage`).
+  Chunking multiplies Jev calls for large content (one per ~60 KB); tune
+  the caps to your budget.
 - **Fail-open by default.** Availability is prioritized over enforcement; set
   `JEV_GUARD_FAIL_MODE=block` only once the key and network are dependable.
 - **Port-specific gaps** — ZCode covers `WebFetch`/`Read` fully but not
