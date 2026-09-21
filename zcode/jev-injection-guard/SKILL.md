@@ -82,7 +82,7 @@ output from `Bash`/`Grep` is **not** guarded; judge that content with
 | `TYPESAFE_API_KEY` | — (required) | Jev access; without it the guard fails open |
 | `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal >= this, in any chunk |
 | `JEV_GUARD_MAX_CHARS` | `60000` | Chunk size screened per Jev call |
-| `JEV_GUARD_MAX_CHUNKS` | `10` | Max chunks screened per load (600 KB at defaults) |
+| `JEV_GUARD_MAX_CHUNKS` | `1000` | Max chunks screened per load (60 MB at defaults) |
 | `JEV_GUARD_MAX_BYTES` | `10485760` | Raw read cap per load (10 MB) |
 | `JEV_GUARD_FAIL_MODE` | `open` | `block` = deny loads when the guard errors |
 | `JEV_GUARD_SKIP` | — | Comma-separated globs never judged (e.g. `**/tests/*,**/*.min.js`) |
