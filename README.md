@@ -176,8 +176,8 @@ All via environment variables:
 | `TYPESAFE_API_KEY` | — (required) | Jev access; without it the guard fails open |
 | `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal ≥ this, in any chunk |
 | `JEV_GUARD_MAX_CHARS` | `60000` | Chunk size screened per Jev call |
-| `JEV_GUARD_MAX_CHUNKS` | `1000` | Max chunks screened per load (60 MB at defaults — the `JEV_GUARD_MAX_BYTES` raw cap binds first); beyond it coverage is partial |
-| `JEV_GUARD_MAX_BYTES` | `10485760` | Raw read cap per load (10 MB) |
+| `JEV_GUARD_MAX_CHUNKS` | `1000` | Max chunks screened per load; beyond it coverage is partial |
+| `JEV_GUARD_MAX_BYTES` | `58000000` | Raw read cap per load (~58 MB — aligned with the 1000-chunk budget) |
 | `JEV_GUARD_FAIL_MODE` | `open` | `block` = deny loads when the guard errors |
 | `JEV_GUARD_SKIP` | — | Comma-separated globs never judged (e.g. `**/tests/*,**/*.min.js`) |
 | `JEV_GUARD_MOCK` | — | `clean`/`malicious` skips the API (wiring tests only) |
@@ -206,12 +206,13 @@ All via environment variables:
   consequences, and treat the `request_id` as your audit handle.
 - **Coverage is capped, not unbounded.** Large content is screened in
   overlapping chunks — every chunk must pass, so payloads cannot hide at
-  chunk boundaries — up to `JEV_GUARD_MAX_CHUNKS` chunks (60 MB at
-  defaults, so the `JEV_GUARD_MAX_BYTES` raw cap of 10 MB binds first) and
-  `JEV_GUARD_MAX_BYTES` raw (10 MB). Past those caps the remainder is
-  unscreened and the guard says so (`PARTIAL coverage`). Chunking multiplies
-  Jev calls for large content (one per ~60 KB — a 10 MB load is ~170 calls);
-  tune the caps to your budget.
+  chunk boundaries — up to `JEV_GUARD_MAX_CHUNKS` chunks and
+  `JEV_GUARD_MAX_BYTES` raw. The defaults (~58 MB both ways) are aligned:
+  1000 chunks of 60 KB is exactly the most content one load can fully
+  cover. Past those caps the remainder is unscreened and the guard says so
+  (`PARTIAL coverage`). Chunking multiplies Jev calls for large content
+  (one per ~60 KB — the cap is the full 1000-call budget); tune the caps
+  to your budget.
 - **Fail-open by default.** Availability is prioritized over enforcement; set
   `JEV_GUARD_FAIL_MODE=block` only once the key and network are dependable.
 - **Port-specific gaps** — ZCode covers `WebFetch`/`Read` fully but not

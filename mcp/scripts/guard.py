@@ -20,7 +20,7 @@ Usage:
 
 Env: TYPESAFE_API_KEY (required), JEV_GUARD_THRESHOLD (0.80),
 JEV_GUARD_MAX_CHARS (60000 chunk size), JEV_GUARD_MAX_CHUNKS (1000),
-JEV_GUARD_MAX_BYTES (10MB), JEV_GUARD_FAIL_MODE (open|block),
+JEV_GUARD_MAX_BYTES (58MB), JEV_GUARD_FAIL_MODE (open|block),
 JEV_GUARD_SKIP (globs, files only), JEV_GUARD_MOCK (clean|malicious, tests).
 """
 
@@ -42,7 +42,7 @@ THRESHOLD = float(os.environ.get("JEV_GUARD_THRESHOLD", "0.80"))
 MAX_CHARS = int(os.environ.get("JEV_GUARD_MAX_CHARS", "60000"))  # chunk size
 CHUNK_OVERLAP = min(2000, MAX_CHARS // 10)  # keeps boundary-straddling text whole
 MAX_CHUNKS = int(os.environ.get("JEV_GUARD_MAX_CHUNKS", "1000"))
-MAX_BYTES = int(os.environ.get("JEV_GUARD_MAX_BYTES", str(10 * 1024 * 1024)))
+MAX_BYTES = int(os.environ.get("JEV_GUARD_MAX_BYTES", str(58 * 1000 * 1000)))  # what MAX_CHUNKS can fully cover
 FAIL_MODE = os.environ.get("JEV_GUARD_FAIL_MODE", "open").strip().lower()
 MOCK = os.environ.get("JEV_GUARD_MOCK", "").strip().lower() or None
 SKIP_GLOBS = [g.strip() for g in os.environ.get("JEV_GUARD_SKIP", "").split(",") if g.strip()]

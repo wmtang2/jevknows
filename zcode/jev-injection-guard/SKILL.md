@@ -83,7 +83,7 @@ output from `Bash`/`Grep` is **not** guarded; judge that content with
 | `JEV_GUARD_THRESHOLD` | `0.80` | Deny when any signal >= this, in any chunk |
 | `JEV_GUARD_MAX_CHARS` | `60000` | Chunk size screened per Jev call |
 | `JEV_GUARD_MAX_CHUNKS` | `1000` | Max chunks screened per load (60 MB at defaults) |
-| `JEV_GUARD_MAX_BYTES` | `10485760` | Raw read cap per load (10 MB) |
+| `JEV_GUARD_MAX_BYTES` | `58000000` | Raw read cap per load (~58 MB — aligned with the 1000-chunk budget) |
 | `JEV_GUARD_FAIL_MODE` | `open` | `block` = deny loads when the guard errors |
 | `JEV_GUARD_SKIP` | — | Comma-separated globs never judged (e.g. `**/tests/*,**/*.min.js`) |
 | `JEV_GUARD_MOCK` | — | `clean`/`malicious` skips the API (wiring tests only) |

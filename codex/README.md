@@ -126,7 +126,7 @@ $PY codex/scripts/guard.py --url  https://example.com       # decision: allow
 Same environment variables as the ZCode port: `TYPESAFE_API_KEY`,
 `JEV_GUARD_THRESHOLD` (0.80), `JEV_GUARD_MAX_CHARS` (60000 chunk size),
 `JEV_GUARD_MAX_CHUNKS` (1000 — large content is screened in full via
-overlapping chunks up to this cap), `JEV_GUARD_MAX_BYTES` (10 MB raw read
+overlapping chunks up to this cap), `JEV_GUARD_MAX_BYTES` (~58 MB raw read
 cap), `JEV_GUARD_FAIL_MODE` (`open`), `JEV_GUARD_SKIP` (file globs),
 `JEV_GUARD_MOCK` (`clean`/`malicious`). See the [root README](../README.md).
 
