@@ -37,9 +37,10 @@ Thresholds and instructions deliberately distinguish *instructing* the agent
 from *discussing* injection (security articles, test fixtures score low).
 
 Content larger than one chunk (60k chars) is screened in full: it is split
-into overlapping chunks, every chunk is judged, and any chunk over the
-threshold blocks. Reports include coverage (`10/14 chunks [PARTIAL
-coverage]` when the chunk cap is hit).
+into overlapping chunks, chunks are judged in order, and the first chunk
+over the threshold blocks the load, stopping the scan early (clean content
+is screened in full). Reports include coverage (`10/14 chunks [PARTIAL
+coverage]` when the scan stopped early or hit the chunk cap).
 
 Failure behavior: guard errors **fail open** (allow + note on stderr) so a
 missing key or outage never bricks the session. Set `JEV_GUARD_FAIL_MODE=block`
@@ -65,9 +66,10 @@ Manual mode prints a JSON report:
   "source": {"tool": "manual", "path": "page.md"},
   "signals": {"agent_directive": 0.03, "harmful_intent": 0.01, "concealed_directive": 0.02},
   "threshold": 0.8,
+  "coverage": {"chunks_scanned": 1, "chunks_total": 1, "complete": true},
   "decision": "allow",
-  "reason": "no signal reached the threshold",
-  "request_id": "req_..."
+  "reason": "agent_directive=0.03 harmful_intent=0.01 concealed_directive=0.02; 1/1 chunks; request_ids=req_...",
+  "request_ids": ["req_..."]
 }
 ```
 
@@ -89,7 +91,7 @@ output from `Bash`/`Grep` is **not** guarded; judge that content with
 | `JEV_GUARD_MOCK` | — | `clean`/`malicious` skips the API (wiring tests only) |
 
 Binary files are skipped without a judgment (nothing to instruct). Blocked
-loads report the fired signals and `request_id` on stderr; the block reason
+loads report the fired signals and `request_ids` on stderr; the block reason
 appears in the ZCode hook log.
 
 ## Tuning and troubleshooting

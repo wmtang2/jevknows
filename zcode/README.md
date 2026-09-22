@@ -89,7 +89,7 @@ absolute path instead — `${ZCODE_PROJECT_DIR}` only resolves workspace paths.
 
 Hook configuration is read at session start. In a new session, the hook log
 should show the guard running on each `WebFetch`/`Read`, and a blocked load
-denies the tool call with the fired signals and a `request_id`.
+denies the tool call with the fired signals and `request_ids`.
 
 ## Test it
 

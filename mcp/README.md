@@ -173,4 +173,6 @@ verdicts), `JEV_GUARD_MOCK`. See the [root README](../README.md).
 - **Tool approval**: depending on client settings, each guard call may ask
   for confirmation.
 - The engine (`scripts/guard.py`) is logic-identical to the other ports';
-  keep fixes in sync.
+  keep fixes in sync. Its bundled `--hook` mode is the Codex-style hook —
+  it guards `Bash` and `mcp__*` tool calls only, not `Read`/`WebFetch` —
+  and is unused on MCP clients.

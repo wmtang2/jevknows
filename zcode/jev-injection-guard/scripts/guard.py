@@ -31,8 +31,9 @@ Env:
   JEV_GUARD_MOCK          clean | malicious -- skip the API (wiring tests only)
 
 Content larger than one chunk is screened in overlapping chunks (2k overlap
-so a directive straddling a boundary stays whole); every chunk is judged and
-ANY chunk over the threshold blocks the load. Chunks beyond MAX_CHUNKS are
+so a directive straddling a boundary stays whole). Chunks are judged in
+order and the FIRST chunk over the threshold blocks the load, stopping the
+scan; clean content is screened in full. Chunks beyond MAX_CHUNKS are
 unscreened and reported as partial coverage.
 """
 
@@ -155,9 +156,10 @@ def split_chunks(content: str) -> list[str]:
 
 
 def judge_content(source: dict, content: str) -> dict:
-    """Screen content in overlapping chunks: every chunk is judged, and any
-    chunk over the threshold blocks the whole load. The overlap keeps a
-    directive straddling a chunk boundary whole inside the next chunk."""
+    """Screen content in overlapping chunks. Chunks are judged in order and
+    the FIRST chunk over the threshold blocks the load, stopping the scan;
+    clean content is screened in full. The overlap keeps a directive
+    straddling a chunk boundary whole inside the next chunk."""
     chunks = split_chunks(content)
     worst = {name: 0.0 for name in QUESTIONS}
     fired: list[str] = []
@@ -170,13 +172,14 @@ def judge_content(source: dict, content: str) -> dict:
             worst[name] = max(worst[name], probs[name])
         if blocked:
             fired.append(f"chunk {idx + 1}/{len(chunks)}: {reason}")
-    scanned, total = len(chunks), total_chunks(content)
+            break  # verdict decided -- don't spend the rest of the budget
+    scanned = len(request_ids)  # chunks actually judged (early exit scans fewer)
     return {
         "blocked": bool(fired),
         "reason": "; ".join(fired) or "no chunk reached the threshold",
         "signals": worst,
-        "coverage": {"chunks_scanned": scanned, "chunks_total": total,
-                     "complete": scanned >= total},
+        "coverage": {"chunks_scanned": scanned, "chunks_total": total_chunks(content),
+                     "complete": scanned >= total_chunks(content)},
         "request_ids": request_ids,
     }
 
@@ -273,9 +276,13 @@ def run_hook() -> int:
         payload = json.load(sys.stdin)
     except Exception as exc:
         return allow(f"could not parse hook input ({exc}); not judging")
+    if not isinstance(payload, dict):
+        return allow("hook input is not a JSON object; not judging")
 
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        tool_input = {}
     cwd = payload.get("cwd")
 
     if tool == "Read":
@@ -285,12 +292,15 @@ def run_hook() -> int:
         if is_skipped(resolve_path(path, cwd)):
             return allow("path matches JEV_GUARD_SKIP")
         source = {"tool": "Read", "path": path}
-        try:
-            content, note = load_file(path, cwd)
-        except OSError as exc:
-            return guard_error("Read", f"cannot read {path}: {exc}")
-        if note:
-            return allow(note)
+        if MOCK:
+            content, note = "(mock mode: content not read)", None
+        else:
+            try:
+                content, note = load_file(path, cwd)
+            except OSError as exc:
+                return guard_error("Read", f"cannot read {path}: {exc}")
+            if note:
+                return allow(note)
     elif tool == "WebFetch":
         url = tool_input.get("url", "")
         if not url:
@@ -377,7 +387,7 @@ def main() -> int:
         return run_manual({"tool": "manual", "url": args.url}, content, note)
 
     if args.text:
-        content = sys.stdin.read()[:MAX_CHARS]
+        content = sys.stdin.read()
         return run_manual({"tool": "manual", "source": "stdin"}, content, None)
 
     parser.print_help(sys.stderr)

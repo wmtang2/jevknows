@@ -4,8 +4,9 @@ Any MCP-capable agent without a pre-tool-use hook drives this engine
 through an MCP server (mcp_server.py, same folder) plus an
 instructions-file policy. This file
 keeps the manual CLI (--file/--url/--text) for direct checks and stays
-logic-identical to the other ports' guard.py; the --hook mode is unused
-here but kept for parity.
+logic-identical to the other ports' engine. Its bundled --hook mode is the
+Codex-style hook (guards Bash and mcp__* tools only -- no Read/WebFetch)
+and is unused on MCP clients.
 
 Same engine as the ZCode/Codex ports: three Noul questions to Jev in one
 call (agent_directive, harmful_intent, concealed_directive); deny if ANY
@@ -138,9 +139,10 @@ def split_chunks(content: str) -> list[str]:
 
 
 def judge_content(source: dict, content: str) -> dict:
-    """Screen content in overlapping chunks: every chunk is judged, and any
-    chunk over the threshold blocks the whole load. The overlap keeps a
-    directive straddling a chunk boundary whole inside the next chunk."""
+    """Screen content in overlapping chunks. Chunks are judged in order and
+    the FIRST chunk over the threshold blocks the load, stopping the scan;
+    clean content is screened in full. The overlap keeps a directive
+    straddling a chunk boundary whole inside the next chunk."""
     chunks = split_chunks(content)
     worst = {name: 0.0 for name in QUESTIONS}
     fired: list[str] = []
@@ -153,13 +155,14 @@ def judge_content(source: dict, content: str) -> dict:
             worst[name] = max(worst[name], probs[name])
         if blocked:
             fired.append(f"chunk {idx + 1}/{len(chunks)}: {reason}")
-    scanned, total = len(chunks), total_chunks(content)
+            break  # verdict decided -- don't spend the rest of the budget
+    scanned = len(request_ids)  # chunks actually judged (early exit scans fewer)
     return {
         "blocked": bool(fired),
         "reason": "; ".join(fired) or "no chunk reached the threshold",
         "signals": worst,
-        "coverage": {"chunks_scanned": scanned, "chunks_total": total,
-                     "complete": scanned >= total},
+        "coverage": {"chunks_scanned": scanned, "chunks_total": total_chunks(content),
+                     "complete": scanned >= total_chunks(content)},
         "request_ids": request_ids,
     }
 
@@ -308,9 +311,13 @@ def run_hook() -> int:
         payload = json.load(sys.stdin)
     except Exception as exc:
         return allow(f"could not parse hook input ({exc}); not judging")
+    if not isinstance(payload, dict):
+        return allow("hook input is not a JSON object; not judging")
 
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        tool_input = {}
     cwd = payload.get("cwd")
 
     if tool in ("Bash", "Shell", "exec_command"):
@@ -415,7 +422,7 @@ def main() -> int:
         return run_manual({"tool": "manual", "url": args.url}, content, note)
 
     if args.text:
-        content = sys.stdin.read()[:MAX_CHARS]
+        content = sys.stdin.read()
         return run_manual({"tool": "manual", "source": "stdin"}, content, None)
 
     parser.print_help(sys.stderr)

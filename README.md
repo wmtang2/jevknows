@@ -62,10 +62,12 @@ fixtures), which is the usual source of false positives.
 
 Content larger than one chunk is screened in full: it is split into
 **overlapping chunks** of `JEV_GUARD_MAX_CHARS` (2k overlap, so a payload
-straddling a chunk boundary stays whole in the next chunk), every chunk is
-judged, and any chunk over the threshold blocks the load. Reports include
-chunk coverage — `10/14 chunks [PARTIAL coverage]` when the
-`JEV_GUARD_MAX_CHUNKS` cap is hit.
+straddling a chunk boundary stays whole in the next chunk). Chunks are
+judged in order and the **first chunk over the threshold blocks the load**,
+stopping the scan early — a denied load doesn't pay for the rest — while
+clean content is screened in full. Reports include chunk coverage —
+`10/14 chunks [PARTIAL coverage]` when the scan stopped early or hit the
+`JEV_GUARD_MAX_CHUNKS` cap.
 
 Binary files are skipped without a judgment. Guard errors (missing API key,
 network outage, timeout) **fail open** by default so a broken guard can never
@@ -125,9 +127,10 @@ instruction detected), or `1` (guard error):
   "source": {"tool": "manual", "path": "page.md"},
   "signals": {"agent_directive": 0.03, "harmful_intent": 0.01, "concealed_directive": 0.02},
   "threshold": 0.8,
+  "coverage": {"chunks_scanned": 1, "chunks_total": 1, "complete": true},
   "decision": "allow",
-  "reason": "no signal reached the threshold",
-  "request_id": "req_..."
+  "reason": "agent_directive=0.03 harmful_intent=0.01 concealed_directive=0.02; 1/1 chunks; request_ids=req_...",
+  "request_ids": ["req_..."]
 }
 ```
 
@@ -203,7 +206,7 @@ All via environment variables:
 
 - **A judgment is not a sandbox.** Signals are calibrated probabilities, not
   proof. Validate the guard on your own traffic, tune the threshold to your
-  consequences, and treat the `request_id` as your audit handle.
+  consequences, and treat the `request_ids` as your audit handle.
 - **Coverage is capped, not unbounded.** Large content is screened in
   overlapping chunks — every chunk must pass, so payloads cannot hide at
   chunk boundaries — up to `JEV_GUARD_MAX_CHUNKS` chunks and
@@ -211,8 +214,8 @@ All via environment variables:
   1000 chunks of 60 KB is exactly the most content one load can fully
   cover. Past those caps the remainder is unscreened and the guard says so
   (`PARTIAL coverage`). Chunking multiplies Jev calls for large content
-  (one per ~60 KB — the cap is the full 1000-call budget); tune the caps
-  to your budget.
+  (one per ~60 KB); a denied load stops at the first flagged chunk, so only
+  clean content pays the full budget.
 - **Fail-open by default.** Availability is prioritized over enforcement; set
   `JEV_GUARD_FAIL_MODE=block` only once the key and network are dependable.
 - **Port-specific gaps** — ZCode covers `WebFetch`/`Read` fully but not
